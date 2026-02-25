@@ -2,7 +2,7 @@
 const { test, expect, chromium } = require('@playwright/test');
 const path = require('path');
 
-const FILE_URL = `file:///${path.resolve(__dirname, 'shopping-list.html').replace(/\\/g, '/')}`;
+const FILE_URL = `file:///${path.resolve(__dirname, 'index.html').replace(/\\/g, '/')}`;
 
 test.describe('🛒 쇼핑 리스트 앱 테스트', () => {
 
