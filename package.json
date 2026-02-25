@@ -1,0 +1,15 @@
+{
+  "name": "shopping-listapp",
+  "version": "1.0.0",
+  "description": "쇼핑 리스트 웹 앱 with Playwright 테스트",
+  "scripts": {
+    "test": "npx playwright test"
+  },
+  "keywords": ["shopping", "list", "playwright"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}
