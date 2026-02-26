@@ -1,6 +1,6 @@
 # 🛒 쇼핑 리스트 앱
 
-바닐라 JS로 만든 쇼핑 리스트 웹 앱입니다. Playwright E2E 테스트가 포함되어 있습니다.
+바닐라 JS로 만든 쇼핑 리스트 웹 앱입니다. 데이터는 Supabase PostgreSQL DB에 저장되며, Playwright E2E 테스트가 포함되어 있습니다.
 
 ## 기능
 
@@ -19,11 +19,38 @@
 - `완료 항목 삭제` 버튼으로 체크된 아이템 일괄 삭제
 
 ### 데이터 영속성
-- `localStorage`에 자동 저장 — 페이지를 새로고침해도 목록 유지
+- 모든 데이터는 **Supabase PostgreSQL DB**에 저장
+- 페이지 새로고침 및 다른 기기에서도 데이터 유지
+- 페이지 로드 시 로딩 스피너 표시, 오류 발생 시 에러 메시지 표시
 
 ### 접근성
 - 스크린 리더를 위한 `aria-label` 및 `sr-only` 레이블 적용
 - 키보드 탐색 및 `focus-visible` 스타일 지원
+
+---
+
+## 데이터베이스
+
+[Supabase](https://supabase.com/)를 사용하며, `shopping_items` 테이블에 데이터를 저장합니다.
+
+### 테이블 스키마
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | UUID | 기본 키 (자동 생성) |
+| `name` | TEXT | 아이템 이름 |
+| `done` | BOOLEAN | 완료 여부 (기본값 false) |
+| `created_at` | TIMESTAMPTZ | 생성 시각 (자동 생성) |
+
+### API 연동
+
+| 동작 | Supabase 쿼리 |
+|---|---|
+| 목록 불러오기 | `SELECT * ORDER BY created_at DESC` |
+| 아이템 추가 | `INSERT INTO shopping_items (name, done)` |
+| 완료 토글 | `UPDATE shopping_items SET done = ? WHERE id = ?` |
+| 개별 삭제 | `DELETE FROM shopping_items WHERE id = ?` |
+| 완료 항목 일괄 삭제 | `DELETE FROM shopping_items WHERE done = true` |
 
 ---
 
@@ -60,7 +87,7 @@ npm test
 
 ```
 shopping-listapp/
-├── shopping-list.html      # 앱 본체 (HTML + CSS + JS)
+├── index.html              # 앱 본체 (HTML + CSS + JS + Supabase 연동)
 ├── shopping-list.test.js   # Playwright E2E 테스트
 ├── playwright.config.js    # Playwright 설정
 └── package.json
@@ -69,5 +96,5 @@ shopping-listapp/
 ## 기술 스택
 
 - **Frontend** — HTML5, CSS3, Vanilla JavaScript
-- **저장소** — Web Storage API (localStorage)
+- **Database** — Supabase (PostgreSQL)
 - **테스트** — Playwright
