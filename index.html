@@ -87,6 +87,11 @@
       outline-offset: 2px;
     }
 
+    .input-row button:disabled {
+      background: #a0aec0;
+      cursor: not-allowed;
+    }
+
     .stats {
       display: flex;
       justify-content: space-between;
@@ -189,6 +194,39 @@
       margin-bottom: 12px;
     }
 
+    .loading {
+      text-align: center;
+      color: #a0aec0;
+      padding: 40px 0;
+      font-size: 0.95rem;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-msg {
+      background: #fff5f5;
+      color: #c53030;
+      border: 1px solid #fed7d7;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
     .sr-only {
       position: absolute;
       width: 1px;
@@ -212,64 +250,65 @@
       <button type="button" id="addBtn">추가</button>
     </div>
 
+    <div class="error-msg" id="errorMsg"></div>
+
     <div class="stats" id="stats" style="display:none;">
       <span id="statsText"></span>
       <button type="button" class="clear-btn" id="clearBtn">완료 항목 삭제</button>
     </div>
 
+    <div class="loading" id="loading">
+      <span class="loading-spinner"></span><br>불러오는 중...
+    </div>
+
     <ul id="list"></ul>
-    <div class="empty" id="empty">
+    <div class="empty" id="empty" style="display:none;">
       <span class="empty-icon">🛍️</span>
       아직 아이템이 없어요.<br>위에서 추가해 보세요!
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    function storageAvailable() {
-      try {
-        const x = '__storage_test__';
-        localStorage.setItem(x, x);
-        localStorage.removeItem(x);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
+    const SUPABASE_URL = 'https://tiftjxntkqmxxtcnipdt.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_WEqFADKLfTdfeFI2mLQFUg_5imjhK45';
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    const canStore = storageAvailable();
     let items = [];
-    if (canStore) {
-      try {
-        items = JSON.parse(localStorage.getItem('shoppingList') || '[]');
-      } catch (e) {
-        items = [];
-      }
-    }
+    let isBusy = false;
 
-    const listEl = document.getElementById('list');
-    const emptyEl = document.getElementById('empty');
-    const statsEl = document.getElementById('stats');
+    const listEl    = document.getElementById('list');
+    const emptyEl   = document.getElementById('empty');
+    const statsEl   = document.getElementById('stats');
     const statsText = document.getElementById('statsText');
-    const input = document.getElementById('itemInput');
+    const input     = document.getElementById('itemInput');
+    const addBtn    = document.getElementById('addBtn');
+    const loadingEl = document.getElementById('loading');
+    const errorEl   = document.getElementById('errorMsg');
 
     document.getElementById('addBtn').addEventListener('click', addItem);
     document.getElementById('clearBtn').addEventListener('click', clearChecked);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') addItem(); });
 
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') addItem();
-    });
+    function setBusy(busy) {
+      isBusy = busy;
+      addBtn.disabled = busy;
+      input.disabled = busy;
+    }
 
-    function save() {
-      if (!canStore) return;
-      try {
-        localStorage.setItem('shoppingList', JSON.stringify(items));
-      } catch (e) {
-        console.error('저장 실패 (용량 초과):', e);
-      }
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.style.display = 'block';
+    }
+
+    function hideError() {
+      errorEl.style.display = 'none';
     }
 
     function render() {
       listEl.innerHTML = '';
+      loadingEl.style.display = 'none';
 
       if (items.length === 0) {
         emptyEl.style.display = 'block';
@@ -283,19 +322,19 @@
       const checked = items.filter(i => i.done).length;
       statsText.textContent = `총 ${items.length}개 · 완료 ${checked}개`;
 
-      items.forEach((item, idx) => {
+      items.forEach(item => {
         const li = document.createElement('li');
         if (item.done) li.classList.add('checked');
 
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = item.done;
-        cb.addEventListener('change', () => toggle(idx));
+        cb.addEventListener('change', () => toggle(item.id));
 
         const name = document.createElement('span');
         name.className = 'item-name';
         name.textContent = item.name;
-        name.addEventListener('click', () => toggle(idx));
+        name.addEventListener('click', () => toggle(item.id));
         name.style.cursor = 'pointer';
 
         const del = document.createElement('button');
@@ -303,7 +342,7 @@
         del.className = 'delete-btn';
         del.textContent = '✕';
         del.setAttribute('aria-label', `${item.name} 삭제`);
-        del.addEventListener('click', () => remove(idx));
+        del.addEventListener('click', () => remove(item.id));
 
         li.appendChild(cb);
         li.appendChild(name);
@@ -312,34 +351,97 @@
       });
     }
 
-    function addItem() {
+    async function loadItems() {
+      const { data, error } = await db
+        .from('shopping_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        showError('데이터를 불러오지 못했습니다: ' + error.message);
+        loadingEl.style.display = 'none';
+        return;
+      }
+
+      items = data;
+      render();
+    }
+
+    async function addItem() {
       const name = input.value.trim();
-      if (!name) return;
-      items.unshift({ name, done: false });
+      if (!name || isBusy) return;
+
+      hideError();
+      setBusy(true);
+
+      const { data, error } = await db
+        .from('shopping_items')
+        .insert({ name, done: false })
+        .select()
+        .single();
+
+      setBusy(false);
+
+      if (error) {
+        showError('추가에 실패했습니다: ' + error.message);
+        return;
+      }
+
+      items.unshift(data);
       input.value = '';
-      save();
       render();
     }
 
-    function toggle(idx) {
-      items[idx].done = !items[idx].done;
-      save();
+    async function toggle(id) {
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+
+      const newDone = !item.done;
+      const { error } = await db
+        .from('shopping_items')
+        .update({ done: newDone })
+        .eq('id', id);
+
+      if (error) {
+        showError('상태 변경에 실패했습니다: ' + error.message);
+        return;
+      }
+
+      item.done = newDone;
       render();
     }
 
-    function remove(idx) {
-      items.splice(idx, 1);
-      save();
+    async function remove(id) {
+      const { error } = await db
+        .from('shopping_items')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        showError('삭제에 실패했습니다: ' + error.message);
+        return;
+      }
+
+      items = items.filter(i => i.id !== id);
       render();
     }
 
-    function clearChecked() {
+    async function clearChecked() {
+      const { error } = await db
+        .from('shopping_items')
+        .delete()
+        .eq('done', true);
+
+      if (error) {
+        showError('일괄 삭제에 실패했습니다: ' + error.message);
+        return;
+      }
+
       items = items.filter(i => !i.done);
-      save();
       render();
     }
 
-    render();
+    loadItems();
   </script>
 </body>
 </html>
